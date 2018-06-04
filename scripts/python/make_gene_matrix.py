@@ -1,0 +1,113 @@
+#! /usr/bin/env python
+
+import sys
+import csv
+import os
+import argparse
+import sqlite3
+import multiprocessing
+import codes3d
+
+"""
+Find common eGenes among traits and calculate the ratio of occurrence.
+Takes in as input significant (FDR < 0.05)spatial eQTL SNP-gene interactions
+for each GWAS Catalog trait.
+"""
+
+def resolve_output_fp(input_fp, output_fp):
+    print('Resolving IO parameters..')
+    resolved_output_fp = ''
+    if output_fp == 'NA':
+        resolved_output_fp = input_fp
+    else:
+        resolved_output_fp = output_fp
+    if not resolved_output_fp.endswith('/'):
+        resolved_output_fp = resolved_output_fp + '/'
+    if not os.path.isdir(resolved_output_fp):
+        os.mkdir(resolved_output_fp)
+    print(resolved_output_fp)
+    return resolved_output_fp
+                        
+
+
+def find_common_genes(input_fp):
+    """
+    Find common eGenes from all GWAS trait associations
+
+    Args:
+        trait_eqtls: A directory containing CoDeS3D summary files for each trait.
+
+    Output:
+        gene_matrix.txt: A matrix of shared eGenes among traits as ff:
+          1. Trait X
+          2. Trait Y
+          3. # eGenes associated with Trait X
+          4. Shared genes between X and Y
+          5. Proportion of shared genes in X. i.e. (3)/(4)
+          6. Fisher's p value of proportion in (5)
+    """
+    trait_genes = {}
+    all_genes = []
+    common_genes = []
+    snp_count = {}
+    traits = {}
+    matrix = []
+    print('Extracting genes from eQTL interactions for...')
+    _,traits_dirs,_ = next(os.walk(input_fp), (None, [], None))
+    for trait in traits_dirs:
+        print('\t' + trait)
+        tfile = open(os.path.join(input_fp, trait, 'significant_eqtls.txt'), 'r')
+        eqtls= csv.reader(tfile, delimiter = '\t') 
+        next(tfile, None)
+        for line in eqtls:
+            genes = []
+            if trait in trait_genes.keys():
+                genes = trait_genes[trait]
+            genes.append(line[3])
+            trait_genes[trait] = genes
+            all_genes.append(line[3])
+        tfile.close()
+    for trait in trait_genes:
+        trait_genes[trait] = list(set(trait_genes[trait]))
+    all_genes = list(set(all_genes))
+    print(len(all_genes))
+    done_genes = []
+    for trait in trait_genes.keys():
+        gene_count = {}
+        genes_total = len(trait_genes[trait])
+        compare_traits = trait_genes.keys()
+        if genes_total > 3:
+            for trait_gene in trait_genes[trait]:
+                for compare in compare_traits:
+
+                    if trait_gene in trait_genes[compare]:
+                        if compare not in gene_count.keys():
+                            gene_count[compare] = 1
+                        else:
+                            gene_count[compare] += 1
+            row = []
+            row.append(trait)
+            for compare in gene_count:
+                total_compare_genes = len(trait_genes[compare])
+                pvalue = 1 - (2*gene_count[compare] \
+                    /float((genes_total + total_compare_genes)))
+                ratio = round(gene_count[compare]/float(genes_total), 7)
+                matrix.append([trait, compare, genes_total, gene_count[compare], ratio, pvalue])
+    with open (os.path.join(input_fp, 'gene_matrix.txt'), 'w') as cluster_file:
+        writer = csv.writer(cluster_file, delimiter = '\t')
+        writer.writerow(['trait_x', 'trait_y', '#total_genes', '#common_snps', \
+                             'ratio', 'pvalue'])
+        writer.writerows(matrix)
+
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser(description = "")
+    parser.add_argument("-i", "--input", required = False, \
+                        default="../../results/trait_eqtls/",
+                        help = "Directory of trait files containing SNP" +\
+                        "rsIDs, one per line.") 
+    parser.add_argument("-o", "--output", default = "../../results/", \
+                            help = "Output directory") 
+    args = parser.parse_args()
+    output_fp = resolve_output_fp(args.input, args.output)
+    find_common_genes(args.input)
+

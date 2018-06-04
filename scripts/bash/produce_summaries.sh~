@@ -1,0 +1,16 @@
+#!/bin/bash
+
+#repdir=/mnt/3dgenome/projects/tfad334/hvn/analysis/control/dbsnps1200/snps/1
+repdir=../../results/trait_eqtls
+echo 'Producing summary for...'
+for i in $(ls $repdir);
+do
+    echo -e '\t'$i
+	#echo -e '\t replicate \t'$i
+    python ../python/codes3d/codes3d/produce_summary.py -e $repdir/$i/eqtls.txt -o $repdir/$i \
+	   -c ../python/codes3d/docs/codes3d.conf
+	#if [-f "$repdir/$i/significant_etls.txt"] 
+	#then
+	#	echo "Done!"
+	#fi
+done

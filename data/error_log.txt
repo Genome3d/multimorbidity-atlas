@@ -1,0 +1,10 @@
+trait	snp
+coagulation_factor_measurement	rs687289		
+coagulation_factor_measurement	rs8176704		
+coagulation_factor_measurement	rs8176749		
+coagulation_factor_measurement	rs687289		
+coagulation_factor_measurement	rs8176704		
+coagulation_factor_measurement	rs8176749		
+coagulation_factor_measurement	rs687289		
+coagulation_factor_measurement	rs8176704		
+coagulation_factor_measurement	rs8176749		
