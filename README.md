@@ -20,6 +20,8 @@ To investigate trait or phenotype multimorbidity by integrating chromatin intera
   git clone https://github.com/alcamerone/codes3d.git
   ```
 
+- To quickly find multimorbid traits without running the entire methods,
+download and unzip the [spatial eQTL data for traits](https://doi.org/10.17608/k6.auckland.6459728) into the results directory (1.59 GB). Then run step 9 in Method overview section below.
 
 ## Method overview
 
@@ -41,26 +43,30 @@ To investigate trait or phenotype multimorbidity by integrating chromatin intera
    cd ../python/
    ./init_db.py
    ```
-4. Getting eQTLs for complex traits:
+4. Get eQTLs associated with complex traits:
    ```
    ./get_trait_eqtls.py
    ```
-5. Obtaining of tissue specific spatial eQTL-eGene interactions:
+5. Obtain significant tissue-specific spatial eQTLs:
    ```
    cd ../bash/
    ./produce_summaries.sh
    ```
-6. Construct matrices of shared eQTLs, eGenes ratios among complex traits. Plus control analysis:
+6. Get eQTL-eGene interactions in tissues
    ```
    cd ../python/
+   ./get_eqtl_interactions.py
+   ```
+7. Construct matrices of shared eQTLs, eGenes ratios among complex traits. Plus control analysis:
+   ```
    ./control_analysis.py
    ```
-7. Cluster complex traits by shared eGenes and eQTLs
+8. Cluster complex traits by shared eGenes and eQTLs
    ```
    cd ../R/
    ./convex_biclustering.R
    ```
-8. Find traits that share eGene, using trait, SNPs, or genes as input:
+9. Find traits that share eGenes. Run command with -h for help:
    ```
    cd ../python/
    ./get_cluster.py
