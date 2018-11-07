@@ -8,8 +8,12 @@ To investigate trait or phenotype multimorbidity by integrating chromatin intera
 - [OMIM's](https://www.omim.org/) genemap2 data
 
 
+## Visualisation
+The figures generated in this study (and their underlying code) can be viewed in visualisation.html or the visualisation.Rmd R Markdown file.
+
+
 ## Getting Started 
-- To begin, clone this repository with:
+- To reproduce this work, clone this repository with:
   ```
   git clone https://github.com/Genome3d/multimorbidity-atlas.git
   ```

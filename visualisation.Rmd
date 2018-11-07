@@ -1,0 +1,804 @@
+---
+title: Chromatin interactions and expression quantitative trait loci reveal genetic
+  drivers of multimoridities
+author: "Tayaza Fadason <t.fadason@auckland.ac.nz>"
+date: "14 August 2018"
+output:
+  html_document: default
+  pdf_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+# knitr::opts_knit$set(root.dir ="~/genome3d/tfad334/multimordity-atlas/")
+```
+
+## Note
+To reproduce this analysis, please (download the analysis data)[https://doi.org/10.17608/k6.auckland.7308944] and unzip the content in the same directory as this R Markdown file. Note that when unzipped, the size of the directory is 26 GB.
+
+## Main Figures
+
+
+Fig 1b: Proportion z-test for eQTLs associations with a single vs multiple spatial evidence
+```{r fig1b_z_test}
+library(tidyverse)
+spatial.df <- data.frame(Category=c("spatial.pairs","eQTL.associations"),
+                         One=c(686134,2575),
+                         Many=c(496903,73438),
+                         Total=c(1183037,76013))
+spatial.df <- gather(spatial.df, hic.loops, value,One:Many)
+spatial.df$percentage <- spatial.df$value / spatial.df$Total * 100
+
+
+prop.test(x=subset(spatial.df, Category=="eQTL.associations")$value, 
+          n=subset(spatial.df, Category=="spatial.pairs")$value, 
+          alternative="less")
+```
+
+
+#### Fig 1b: Plot eQTL associations with a single vs multiple spatial evidence
+```{r fig1b_plot, fig.width=6, fig.height=4}
+ggplot(spatial.df, 
+       aes(factor(Category, levels=c("spatial.pairs","eQTL.associations"))))+
+  geom_bar(aes(weight=percentage, fill=factor(hic.loops, levels=c("One","Many"))), position=position_dodge())+
+  theme_classic()+
+  scale_y_continuous("Percentage", limits=c(0,100), expand=c(0,0))+
+  scale_x_discrete("", labels=c("SNP-gene pairs", "eQTL associations"))+
+  scale_fill_brewer("Captured interactions", type="qual", palette = 7)#+
+  # ggsave("analysis/review_hic/hic_loops.pdf", width=6, height=4)
+```
+
+
+
+#### Fig 1c: Plot GWAS-Matched vs Novel eQTL-eGene mapping
+```{r fig1c_plot, fig.width=5, fig.height=4}
+mapping.df <- data.frame(
+  Mapping = rep(c("CoDeS3D","GWAS & CoDeS3D"),each=2),
+  Type = rep(c("Unique","Total"),2),
+  Proportion = c(0.815, 0.757, 0.185, 0.243))
+
+ggplot(mapping.df, aes(x=Type,y=Proportion))+
+  geom_bar(aes(fill=Mapping),stat = "identity")+#,position = position_dodge())+#, width = 0.8)+
+  theme_classic()+
+  labs(fill="SNP-gene mapping")+
+  scale_y_continuous("Proportion", expand = c(0,0), limits = c(0,1))+
+  scale_x_discrete("", 
+                   label=c("eQTL-eGene pairs","Tissue associations"))#+
+  # ggsave("interactions_summary.eps", width = 6, height = 4, dpi=300)
+```
+
+
+
+#### Fig 1e: eQTL-eGene fragment distance 
+```{r fig1e_plot}
+library(tidyverse)
+gtex.df <- read.delim('analysis/chr22/gene_fragments/fragment_gtex_only.txt', sep='\t', header=FALSE)
+gtex.df$method <- 'GTEx'
+
+hic_gtex.df <- read.delim('analysis/chr22/gene_fragments/fragment_sighic_gtex.txt', sep='\t', header=FALSE)
+hic_gtex.df$method <- 'HiC+GTEx'
+
+hic.df <- read.delim('analysis/chr22/gene_fragments/fragment_sighic.txt', sep='\t', header=FALSE)
+hic.df$method <- 'HiC'
+
+chr22.df <- rbind(gtex.df,hic_gtex.df,hic.df)
+chr22.df$Label <- ifelse(abs(chr22.df$V15) < 1000000, "<1Mb", ">=1Mb")
+
+ggplot(chr22.df, aes(abs(V15)))+
+  geom_freqpoly(aes(color=chr22.df$method), bins=100)+
+  theme_classic()+
+  scale_x_continuous('eQTL SNP-eGene fragment distance (Mb)')+
+  scale_color_manual('Method', 
+                     values=c("#989936", "#016699", "#cd6632"),
+                     labels=c("GTEx only", "CoDeS3D only","CoDeS3D + GTEx"))+
+  facet_grid(. ~Label, scales="free")#+
+  # ggsave('fragment_distances_facet.eps', width=5, height=4)
+
+  
+
+```
+
+
+
+#### Fig 1f: Boxplot of eQTL effect sizes of methods 
+```{r fig1f_plot}
+
+gtex.df <- read.delim('analysis/chr22/gene_fragments/gtex_only.txt', header=FALSE)
+gtex.df$method <- 'GTEx'
+hic_gtex.df <- read.delim('analysis/chr22/gene_fragments/sighic_gtex.txt', header=FALSE)
+hic_gtex.df$method <- 'HiC+GTEx'
+hic_only.df <- read.delim('analysis/chr22/gene_fragments/sighic.txt', header=FALSE)
+hic_only.df$method <- 'HiC'
+chr22.df <- rbind(gtex.df,hic_gtex.df,hic_only.df)
+
+ggplot(chr22.df, aes(y=V7))+
+  geom_boxplot(aes(color=factor(method, levels=c("GTEx","HiC+GTEx","HiC"))), notch=TRUE)+
+  scale_y_continuous("eQTL effect size", limits=c(-2,2), expand=c(0,0))+
+  scale_x_discrete("")+
+  scale_color_manual('Method', 
+                     values=c("#989936",  "#cd6632","#016699"),
+                     labels=c("GTEx only","CoDeS3D + GTEx", "CoDeS3D only"))
+
+```
+
+Fig1f: T-tests between groups
+```{r fig1f_t_tests}
+#GTEx only vs CoDeS3D+GTEx
+t.test(gtex.df$V7, hic_gtex.df$V7, var.equal = FALSE)
+
+#GTEx only vs CoDeS3D only
+t.test(gtex.df$V7, hic_only.df$V7, var.equal = FALSE)
+
+#CoDeS3D+GTEx vs CoDeS3D only
+t.test(hic_gtex.df$V7, hic_only.df$V7, var.equal = FALSE)
+
+```
+
+
+
+
+#### Figure 4: eQTL effect on FADS1 and FADS2 in the PUFA metabolism cluster
+```{r fig4_plot, fig.width=10, fig.height=7}
+
+fat.df <- read.delim('analysis/fads_eqtls.txt', sep='\t', header=TRUE)
+snps.omit <- c('rs174479') # rs174479 lies in RAB3IL1, which is outside of the locus we're looking at.
+fat.df <- subset(fat.df, !(SNP.Id%in%snps.omit))
+
+fads1 <- subset(fat.df, Gene.Symbol=='FADS1' || Gene.Symbol=='FADS2')
+fads2 <- subset(fat.df, Gene.Symbol=='FADS2')
+
+snps <- c('rs174528', 'rs174529', 'rs108499', 'rs509360', 'rs174534', 
+          'rs174535', 'rs174536', 'rs174537', 'rs102275', 'rs174538', 
+          'rs4246215', 'rs174541', 'rs174545','rs174546', 'rs174547',
+           'rs174548', 'rs174549', 'rs174550', 'rs174554', 'rs174555', 
+          'rs174556', 'rs968567', 'rs174570', 'rs1535', 'rs174574', 
+          'rs2845573', 'rs174575', 'rs2727270', 'rs2727271', 'rs174576',
+          'rs2524299', 'rs174577', 'rs2072114', 'rs174578', 'rs174583', 'rs2851682',
+          'rs174601', 'rs2526678', 'rs422249', 'rs174448', 'rs174449', 'rs1000778')
+
+tissues <- c("Adipose - Subcutaneous", "Adipose - Visceral (Omentum)",
+             "Artery - Aorta", "Artery - Tibial", "Brain - Anterior cingulate cortex (BA24)",
+             "Brain - Cerebellar Hemisphere", "Brain - Cerebellum", "Brain - Cortex",
+             "Brain - Frontal Cortex (BA9)", "Brain - Nucleus accumbens (basal ganglia)",
+             "Brain - Putamen (basal ganglia)", "Breast - Mammary Tissue",
+             "Cells - EBV-transformed lymphocytes", "Cells - Transformed fibroblasts",
+             "Colon - Sigmoid", "Colon - Transverse", "Esophagus - Gastroesophageal Junction",
+             "Esophagus - Mucosa", "Esophagus - Muscularis", "Heart - Atrial Appendage",
+             "Heart - Left Ventricle", "Liver", "Lung", "Muscle - Skeletal", "Nerve - Tibial",
+             "Pancreas", "Skin - Not Sun Exposed (Suprapubic)", "Skin - Sun Exposed (Lower leg)",
+             "Small Intestine - Terminal Ileum", "Spleen","Stomach", "Testis", "Thyroid",
+             "Uterus", "Whole Blood")
+
+fads.genes <- c('FADS1', 'FADS2')
+data <- setNames(data.frame(matrix(ncol = 3, 
+                                   nrow = length(tissues)*length(snps)*length(fads.genes))
+                            ), c('SNP.Id', 'Gene.Symbol', 'Tissue'))
+
+i <- 1
+for(t in tissues){
+  for(s in snps){
+    for(g in fads.genes){
+       data[i,] <- c(as.character(s), as.character(g), as.character(t))
+       i <- i+1
+    }
+   
+  }
+  
+}
+
+
+merged <- left_join(data, fads1)
+tissue.test <- function(data){
+  ifelse(data$SNP==fads2$SNP.Id && data$Tissue==fads2$Tissue && data$Gene==fads2$Gene.Symbol,
+         c(fads2$SNP.Id, fads2$Gene.Symbol, tissue, fads2$Effect.Size), 
+         c(fads2$SNP.Id, fads2$Gene.Symbol, tissue,'NA'))
+}
+
+ggplot(merged, aes(y=factor(SNP.Id, levels=snps), x=factor(Tissue, levels=tissues)))+
+  geom_tile(aes(fill=Effect.Size))+
+  scale_x_discrete('Tissues')+
+  scale_y_discrete('eQTL SNPs')+
+  scale_fill_gradientn('Effect Size', colors=terrain.colors(10), 
+                       na.value = 'transparent',
+                       #low='#d7191c', mid='#ffffbf', high='#2b83ba',
+                       limits=c(-1.0,1.0))+
+  theme(axis.text.x = element_text(angle=90,hjust=1,vjust=0.01))+
+  facet_grid(. ~ Gene.Symbol)#+
+
+```
+
+
+
+Fig 5a and b data
+```{r fig5_read_data}
+hic.data <- read.delim("analysis/hic_all_celltype.txt", header = T)
+hic.data <- subset(hic.data, hic.data$Cell != '')
+tissues <- levels(hic.data$Tissue)
+```
+
+#### Fig 5a: Heatmap of eQTL p-values in Cells
+```{r fig5a_plot, fig.width=6, fig.height=8}
+
+new.data <- data.frame()
+
+for(t in tissues){
+  a <- subset(hic.data, Tissue==t)
+  a1 <- subset(a, Tissue==t & Cell=='GM12878')
+  a1$PNorm <- mean(a1$Pval)
+  a2 <- subset(a, Tissue==t & Cell=='HMEC')
+  a2$PNorm <- mean(a2$Pval)
+  a3 <- subset(a, Tissue==t & Cell=='HUVEC')
+  a3$PNorm <- mean(a3$Pval)
+  a4 <- subset(a, Tissue==t & Cell=='IMR90')
+  a4$PNorm <- mean(a4$Pval)
+  a5 <- subset(a, Tissue==t & Cell=='K562')
+  a5$PNorm <- mean(a5$Pval)
+  a6 <- subset(a, Tissue==t & Cell=='KBM7')
+  a6$PNorm <- mean(a6$Pval)
+  a7 <- subset(a, Tissue==t & Cell=='NHEK')
+  a7$PNorm <- mean(a7$Pval)
+  a <- rbind(a1,a2,a3,a4,a5,a6,a7)
+  a$PNorm <- 1 - (((a$PNorm - min(a$PNorm))/max(a$PNorm))* max(a$PNorm) / (max(a$PNorm) - min(a$PNorm)))
+  new.data <- rbind(new.data, a)  
+  }
+
+
+ggplot(new.data, aes(x=new.data$Cell, y=new.data$Tissue))+
+  geom_tile(aes(fill=new.data$PNorm))+
+  scale_fill_gradient2(expression(P[eQTL]),mid='#ffffbf', low='#ffffff', high='#053061',
+                       breaks=c(0,1),labels=c('Max', 'Min'), limits=c(0,1))+
+  scale_y_discrete(expand = c(0,0), limits=rev(levels(new.data$Tissue)))+
+  scale_x_discrete(expand = c(0,0))+
+  labs(x='HiC cell lines', y='GTEx tissues')+
+  theme(legend.position = 'top',
+        axis.text.y =element_text(''))#+
+  # ggsave("hic_tissue_pval.pdf", width = 8, height = 10, dpi=300)
+
+
+```
+
+#### Fig 5b: Heatmap of Hi-C contacts in Cells
+```{r fig5b-plot, fig.width=6, fig.height=8}
+contacts.df <- data.frame()
+for(t in tissues){
+    a <- subset(hic.data, Tissue==t)
+    a1 <- subset(a, Tissue==t & Cell=='GM12878')
+    a1$CNorm <- mean(a1$HiC)
+    a2 <- subset(a, Tissue==t & Cell=='HMEC')
+    a2$CNorm <- mean(a2$HiC)
+    a3 <- subset(a, Tissue==t & Cell=='HUVEC')
+    a3$CNorm <- mean(a3$HiC)
+    a4 <- subset(a, Tissue==t & Cell=='IMR90')
+    a4$CNorm <- mean(a4$HiC)
+    a5 <- subset(a, Tissue==t & Cell=='K562')
+    a5$CNorm <- mean(a5$HiC)
+    a6 <- subset(a, Tissue==t & Cell=='KBM7')
+    a6$CNorm <- mean(a6$HiC)
+    a7 <- subset(a, Tissue==t & Cell=='NHEK')
+    a7$CNorm <- mean(a7$HiC)
+    a <- rbind(a1,a2,a3,a4,a5,a6,a7)
+    a$CNorm <- 1 - (((a$CNorm - min(a$CNorm))/max(a$CNorm))* max(a$CNorm) / (max(a$CNorm) - min(a$CNorm)))
+    contacts.df <- rbind(contacts.df, a)  
+  }
+  
+  ggplot(contacts.df, aes(x=contacts.df$Cell, y=contacts.df$Tissue))+
+    geom_raster(aes(fill=contacts.df$CNorm))+
+    scale_fill_gradient2('Hic contacts',mid='#ffffbf', low='#ffffff', high='#053061',
+                         breaks=c(0,1),labels=c('Min', 'Max'), limits=c(0,1))+
+    scale_y_discrete(expand = c(0,0), limits=rev(levels(contacts.df$Tissue)))+
+    scale_x_discrete(expand = c(0,0))+
+    labs(x='HiC cell lines', y='GTEx tissues')+
+    theme(legend.position = 'top',
+          axis.text.y =element_text(''))
+  # ggsave("hic_tissue_counts.pdf", width = 8, height = 10, dpi=300)
+
+```
+
+
+#### Fig 6: OMIM Analysis
+```{r fig6_plot}
+
+library(VennDiagram)
+grid.draw(VennDiagram::draw.pairwise.venn(16313, 7917, 5069, c('OMIM','Spatial'), 
+                                          fill=c('#A6CEE3','#1F78B4'), cex=1.5 ,scaled = T))
+
+df <- data.frame(mapping=c('MappedGenes','MappedGenes','UnknownDefect','UnknownDefect',
+                               'Linkage','Linkage', 'GeneMutation','GeneMutation','DupDel','DupDel'),
+                 value=c(0.311,0.295,0.013,0.012,0.154,0.006,0.813,0.982,0.02,0.0004),
+                 dataset=c('OMIM','Spatial','OMIM','Spatial','OMIM','Spatial','OMIM','Spatial','OMIM','Spatial'))
+
+ggplot(df,aes(df$mapping,df$value,fill=df$dataset))+
+  geom_bar(stat = 'identity',position = position_dodge(0.9))+
+  theme_classic()+
+  scale_y_continuous(expand = c(0,0), limits = c(0,1))+
+  scale_fill_brewer(palette = 'Paired',guide=guide_legend(title='Dataset'))+
+  scale_x_discrete(limits=c('MappedGenes','UnknownDefect','Linkage','GeneMutation','DupDel'),
+                   label=c('Mapped Genes','Unknown Defect','Linkage','Mutation','Duplication'))+
+  labs(x='', y='Proportion')#+
+  # ggsave("omim_bar.pdf", width=8, height=7)
+  
+
+
+
+
+# grid.newpage();
+# pdf("venn.pdf")
+# v <- draw.pairwise.venn(16313, 7917, 5069, c('OMIM','Spatial'), fill=c('#A6CEE3','#1F78B4'), cex=1.5 ,scaled = T);
+# grid.draw(v);
+# dev.off()
+```
+
+
+##Supplementary Figures
+
+#### Supplementary Figure 1a and b: eQTL and eGene distribution
+```{r sup_fig1ab_plot}
+library(tidyverse)
+library(reshape2)
+
+#Plot scatter SNPs vs eQTLs
+m.data <- read.delim('analysis/snp_vs_eqtls.txt', header=T)
+
+# Function to generate correlation coefficient for the charts
+corr_eqn <- function(x,y, digits = 2) {
+  corr_coef <- round(cor(x, y), digits = digits)
+  paste("italic(r) == ", corr_coef)
+}
+# m.data <- m.data[, c("Chr", "SNPs", "eQTLs","eGenes","Size","Genes")]
+# 
+# m.data <- melt(m.data, id.vars = "Chr", measure.vars = c("Size"))
+
+#eGenes, Genes correlation
+ggplot(m.data, aes(x=m.data$Genes, y=m.data$eGenes),colour='#b2182b')+
+  geom_point(aes(colour='eGenes'))+
+  geom_smooth(colour='#b2182b', method = 'lm')+
+  geom_text(aes(label=paste0(m.data$Chr)), size=3, check_overlap = F, colour='#000000',
+            hjust=0,vjust=0, nudge_y=-5, nudge_x = 20)+
+  annotate("text", x = 500, y = 750, size=4,
+            label = corr_eqn(m.data$Genes,
+                             m.data$eGenes), parse = TRUE)+
+  scale_x_continuous(limits = c(0,2200), expand=c(0,0))+
+  scale_y_continuous(limits=c(0,1000), breaks=seq(0,1000,by=200))+
+  theme_classic()+
+  theme(axis.line.y = element_line(color='#000000'),
+        axis.line.x = element_line(color='#000000'),
+        legend.position = c(0.6,0.98))+
+  labs(x='Genes per Chromosome', y='Number of eGenes')+
+  guides(color=guide_legend(title = ''))#+
+  # ggsave('egenes_gene_cor.pdf', width = 5, height = 5, dpi=300)
+  
+  m.data <- m.data[, c("SNPs", "eQTLs","Size","Chromosome", "Chr")]
+  m.data <- melt(m.data, id.vars = c("Size","Chromosome","Chr"))
+  ggplot(m.data, aes(x=Size, y=value, colour=variable))+
+    geom_point()+
+    geom_smooth(method = 'lm')+
+    geom_text(label=c(paste0(m.data$Chr),paste0(m.data$Chromsome)), size=3, check_overlap = F, 
+              hjust=0,vjust=0, nudge_y=-5, nudge_x =2, colour='#000000')+
+    annotate("text", x = 100, y = 1600, size=4, colour='#2166ac',
+             label = corr_eqn(subset(m.data, variable=="SNPs")$Size,
+                              subset(m.data, variable=="SNPs")$value), parse = TRUE)+
+    annotate("text", x = 100, y = 1400, size=4, colour='#8c510a',
+             label = corr_eqn(subset(m.data, variable=="eQTLs")$Size,
+                              subset(m.data, variable=="eQTLs")$value), parse = TRUE)+
+    scale_color_manual(values=c("#2166ac", "#8c510a"))+
+    scale_x_continuous(limits=c(40,max(m.data$Size)+15),breaks=seq(50,300, by=50),expand = c(0,0))+
+    scale_y_continuous(breaks=seq(0,2000,by=500), limits=c(-5,2000))+
+    theme_classic()+
+    theme(axis.line.y = element_line(color='#000000'),
+          axis.line.x = element_line(color='#000000'),
+          legend.position = c(0.6,0.98))+
+    labs(x='Chromosome size (Mb)', y='Count')+
+    guides(color=guide_legend(title=''))#+
+  # ggsave('snps_eqtls_gene_size.pdf', width =5.01 , height = 5, dpi=300)
+```
+
+
+#### Supplementary Figure 1c and d: Manhattan plots of GWAS mapped and unmapped associations
+```{r sup_fig1cd_plot}
+library(qqman)
+eqtl.data <- read.delim("analysis/all_eqtl_interactions_pairs_gene.txt", 
+                        header = T)
+
+#Mapped
+mapped.data <- subset(eqtl.data, eqtl.data$MAPPED == 'TRUE')
+trans.mapped.data <- subset(mapped.data, mapped.data$CIS=='False') # No trans associations
+
+# setEPS()
+# pdf('mapped.pdf', width=10, height=10)
+manhattan(mapped.data,  suggestiveline = -log10(2.5e-06), annotatePval = 1e-40,annotateTop = T,
+          genomewideline = -log10(5e-13),ylim = c(0,100),# highlight = trans.mapped.snps,
+          chrlabs = c(1:22, 'X'))
+# dev.off()
+
+#Unmapped
+unmapped.data <- subset(eqtl.data, eqtl.data$MAPPED == 'FALSE')
+trans.unmapped.data <- subset(unmapped.data, unmapped.data$CIS == 'False')
+trans.unmapped.snps <- trans.unmapped.data$SNP
+
+# setEPS()
+# pdf('unmapped.pdf', width=10, height=10)
+manhattan(unmapped.data,  suggestiveline = -log10(2.5e-06),annotatePval = 1e-40,
+          genomewideline = -log10(5e-13),ylim = c(0,100), chrlabs = c(1:22, 'X'),
+          highlight = trans.unmapped.snps)
+# dev.off()
+
+```
+
+
+#### Supplementary Figure 2a: Violin plot of eQTL p-values and eQTL-eGene distance
+```{r sup_fig2a_plot}
+eqtl.data <- read.delim("analysis/all_eqtl_interactions_pairs.txt", 
+                        header = T)
+#Violin Plots
+zero <- subset(eqtl.data, eqtl.data$DISTANCE ==0 )
+zero$DISTANCE <- '0 mb'
+one <- subset(eqtl.data, eqtl.data$DISTANCE >0 & eqtl.data$DISTANCE <=1000000)
+one$DISTANCE <- '<1 mb'
+
+ten <- subset(eqtl.data, eqtl.data$DISTANCE >1000000 & eqtl.data$DISTANCE <=10000000)
+ten$DISTANCE <- '1-9 mb'
+
+hundred <- subset(eqtl.data, eqtl.data$DISTANCE >10000000 & eqtl.data$DISTANCE <=100000000)
+hundred$DISTANCE <- '10-99 mb'
+
+twohundred <- subset(eqtl.data, eqtl.data$DISTANCE >100000000)
+twohundred$DISTANCE <- '>100 mb'
+
+inter <- subset(eqtl.data, is.na(eqtl.data$DISTANCE))
+inter$DISTANCE <- 'Interchromosomal'
+df <- rbind(zero,one,ten,hundred,twohundred,inter)
+
+library(Hmisc)
+data_summary <- function(x) {
+  m <- mean(x)
+  ymin <- m-sd(x)
+  ymax <- m+sd(x)
+  return(c(y=m,ymin=ymin,ymax=ymax))
+}
+
+ggplot(df, aes(x=df$DISTANCE, y=-log10(eqtl.data$P), color=df$DISTANCE))+
+  geom_violin(aes(fill=df$DISTANCE))+
+  scale_x_discrete(limits=c("0 mb","<1 mb","1-9 mb","10-99 mb",">100 mb","Interchromosomal"))+
+  #geom_boxplot(width=0.1)+
+  stat_summary(fun.data = data_summary, geom = "pointrange", color="black")+
+  #scale_fill_manual(values="#d1e5f0","#fddbc7","#f6e8c3","#c7eae5","#fee090","#e7d4e8")+
+  theme_classic()+
+  theme(legend.position="none")+
+  xlab("eQTL Distance from eGene")+
+  ylab("-log10(p)")+
+  scale_y_continuous(limits = c(0,100),expand = c(0,0))#+
+  # ggsave('distance_distribution.pdf', width=6, height=4, dpi=300)
+```
+
+
+#### Supplementary Figure 2b and c: eGenes affected by eQTLs, eQTL-eGene fragment distribution
+```{r sup_fig2bc_plot}
+data <- read.delim('analysis/fragment_distance_all_closest.txt')
+
+summary(data$Closest_Distance)
+
+ggplot(data, aes(data$Closest_Distance))+
+  geom_freqpoly(bins=100)+
+  scale_x_continuous('SNP-gene fragment distance', expand=c(0.01,0.01))+
+  scale_y_continuous(expand=c(0.01,0.01))+
+  theme_classic()#+
+  # ggsave('fragment_distance_all.eps', width=5, height=4)
+
+
+pairs <- read.delim('analysis/review_hic/all_snp_gene_pairs.txt',sep='\t')
+
+library(plyr)
+snp.freq <- count(pairs$SNP)
+categorise <- function(gene_count){
+  switch(as.character(gene_count),
+         '1' = '1',
+         '2' = '2',
+         '3' = '3',
+         '4' = '4',
+         '>5')
+}
+for(i in 1:nrow(snp.freq)){
+  snp.freq[i, 3] <- categorise(snp.freq[i,2])
+}
+
+ggplot(snp.freq, aes(x=factor(V3, levels=c('1','2','3','4','>5'))))+
+  geom_bar()+
+  scale_y_continuous(expand = c(0,0), limits=c(0,4000))+
+  scale_x_discrete('Number of genes')+
+  theme_classic()#+
+  # ggsave('snp_gene_frequecy.eps', width=4,height=4)
+
+
+# interchrom <- subset(pairs, is.na(DISTANCE)) #1689
+# write.table(interchrom, file='analysis/interchromosomal_pairs.txt', sep='\t')
+# cis <- subset(pairs, DISTANCE<1000000)
+# trans <- subset(pairs, CIS == 'False')
+# trans.intra <- subset(trans, !is.na(DISTANCE))
+
+```
+
+
+
+
+#### Supplementary Figure 3: Q-Q plots of a) eQTLs, b) eGenes, and c) null sets
+```{r sup_fig3_plot}
+control.data <- read.delim("analysis/control_gene_ratios.txt", header = T)
+
+ggplot(control.data, aes(sample=control.data$Ratio), alpha=0.01)+
+  stat_qq()+
+  theme_classic()+
+  labs(y='', x='')#+
+  # theme(axis.text.x = element_blank(),axis.text.y =element_blank())#+
+   # ggsave('Q-Q_Plot_Control_Ratios.pdf', height=70, width=70, units="mm", dpi=300)
+
+egene.data <- read.delim("analysis/egene_ratios.txt", header = T, row.names = NULL)
+ggplot(egene.data, aes(sample=egene.data$Ratio))+
+  stat_qq()+
+  theme_classic()+
+  labs(y='', x='')#+
+  #theme(axis.text.x = element_blank(),axis.text.y =element_blank())#+
+  # ggsave('Q-Q_Plot_eGene_Ratios.png', height=74, width=74, units="mm", dpi=300)
+
+
+eqtl.data <- read.delim("analysis/eqtl_matrix.txt", header = T, row.names = NULL)
+ggplot(eqtl.data, aes(sample=eqtl.data$Ratio))+
+  stat_qq()+
+  theme_classic()+
+  labs(y='', x='')#+
+  #theme(axis.text.x = element_blank(),axis.text.y =element_blank())#+
+  # ggsave('~/Downloads/Q-Q_Plot_eQTL_Ratios.png', height=74, width=74, units="mm", dpi=300)
+
+```
+
+**Supplementary Figure 4 and 5 are generated with scripts/R/convex_biclustering.R**
+
+
+#### Supplementary Figure 8a: LD (R-squared and D-prime) of the FADS eQTLs
+```{r sup_fig8a, fig.width=7, fig.height=7}
+snps <- c('rs174528','rs174529','rs108499','rs509360','rs174534','rs174535','rs174536','rs174537',
+          'rs102275','rs174538','rs4246215','rs174541','rs174545','rs174546','rs174547','rs174548',
+          'rs174549','rs174550','rs174554','rs174555','rs174556','rs968567','rs174570',
+          'rs1535','rs174574','rs2845573','rs174575','rs2727270','rs2727271','rs174576','rs2524299',
+          'rs174577','rs2072114','rs174578','rs174583','rs2851682','rs174601','rs2526678',
+          'rs422249','rs174448','rs174449','rs1000778')
+
+ld_data <- read.delim("analysis/ld_matrix_ceu_r_squared_fads.txt", 
+                       header = T)
+
+get_lower_tri<-function(ld_data){
+  ld_data[upper.tri(ld_data)] <- NA
+  return(ld_data)
+}
+lower_tri <- get_lower_tri(ld_data)
+
+library(reshape2)
+ld_melted <- melt(lower_tri,na.rm = T)
+ggplot(data = ld_melted, aes(y=RS_number, x=variable, fill=value)) + 
+  geom_tile(color='white')+
+  scale_fill_gradient2(low='white', high = 'red',space='Lab', 
+                       name='LD score (R2)', na.value='transparent')+
+  scale_x_discrete("")+
+  scale_y_discrete(limits=snps, name='SNPs')+
+  theme_minimal()+
+  theme(axis.text.x = element_blank())+
+  coord_fixed()#+
+  # ggsave('ld_r_squared.eps', width=8, height=8)
+  
+
+ld_d_data <- read.delim("analysis/ld_ceu_d_prime_fads.txt", 
+                       header = T)
+
+get_upper_tri<-function(ld_data){
+  ld_data[lower.tri(ld_data, diag=T)] <- NA
+  return(ld_data)
+}
+upper_tri <- get_upper_tri(ld_data)
+upper_tri$RS_number <- snps
+upper_ld_melted <- melt(upper_tri,na.rm = TRUE)
+ggplot(data = upper_ld_melted, aes(y=RS_number, x=variable, fill=value)) + 
+  geom_tile(color='white')+
+  scale_fill_gradient2(low='white', high = 'red',space='Lab', 
+                       name='LD score (R2)', na.value='transparent')+
+  scale_x_discrete(limits=snps)+
+  scale_y_discrete(limits=snps, name='SNPs')+
+  theme_minimal()+
+  theme(axis.text.x = element_text(angle=90))+
+  coord_fixed()#+
+  # ggsave('ld_d_prime.eps', width=8, height=8)
+```
+
+
+
+
+#### Supplementary Figure 8b and 8c: Inverse eQTL relationship in FADS1 and FADS2
+
+```{r sup_fig8bc_plot, fig.width=4, fig.height=2}
+fat.df <- read.delim('analysis/fads_eqtls.txt', sep='\t', header=TRUE)
+snps.omit <- c('rs174479') # rs174479 lies in RAB3IL1, which is outside of the locus we're looking at.
+genes <- c('DAGLA', 'MYRF', 'TMEM258', 'FADS1', 'FADS2', 'FADS3')
+
+ggplot(subset(fat.df, SNP.Id=='rs174574'), aes(x=factor(Gene.Symbol, levels=genes), y=Effect.Size))+
+  geom_boxplot()+
+  theme_classic()+
+  scale_y_continuous('eQTL effect size', limits=c(-0.8, 0.8), expand=c(0,0))+
+  scale_x_discrete('eGenes')+
+  geom_hline(yintercept = 0, linetype='dotdash')+
+  labs(title = "rs174574")
+  # ggsave('rs174574_effects.eps', width=4, height=2)
+
+
+ggplot(subset(fat.df, SNP.Id=='rs102275'), aes(x=factor(Gene.Symbol, levels=genes), y=Effect.Size))+
+  geom_boxplot()+
+  theme_classic()+
+  scale_y_continuous('eQTL effect size', limits=c(-0.8, 0.8), expand=c(0,0))+
+  scale_x_discrete('eGenes')+
+  geom_hline(yintercept = 0, linetype='dotdash')+
+  labs(title = "rs102275")
+  # ggsave('rs102275_effects.eps', width=4, height=2)
+```
+
+
+
+#### Supplementary Figure 9a: Plot LD (R-squared) for CHRNA cluster variants
+```{r sup_fig9a_plot}
+snps <- c('rs11858836', 'rs13180', 'rs11852372', 'rs9788721', 'rs8034191', 'rs8031948',
+          'rs2036527', 'rs503464', 'rs667282', 'rs17486278',
+          'rs1051730', 'rs12914385', 'rs55676755', 'rs8042374',
+          'rs55958997')
+
+ld_data <- read.delim("analysis/ld_ceu_r_squared_chrna.txt", 
+                       header = T)
+
+get_lower_tri<-function(ld_data){
+  ld_data[upper.tri(ld_data)] <- NA
+  return(ld_data)
+}
+lower_tri <- get_lower_tri(ld_data)
+
+ld_melted <- melt(lower_tri,na.rm = T)
+ggplot(data = ld_melted, aes(y=RS_number, x=variable, fill=value)) + 
+  geom_tile(color='white')+
+  scale_fill_gradient2(low='white', high = 'red',space='Lab', 
+                       name='LD score (R2)', na.value='transparent')+
+  scale_x_discrete(limits=snps)+
+  scale_y_discrete(limits=snps, name='SNPs')+
+  theme_minimal()+
+  theme(axis.text.x = element_text(angle=90))+
+  coord_fixed()#+
+  # ggsave('analysis/ld_r_squared.eps', width=8, height=8)
+
+
+ld_data <- read.delim("analysis/ld_ceu_d_prime_chrna.txt", 
+                       header = T)
+
+get_upper_tri<-function(ld_data){
+  ld_data[lower.tri(ld_data, diag=T)] <- NA
+  return(ld_data)
+}
+upper_tri <- get_upper_tri(ld_data)
+upper_tri$RS_number <- snps
+upper_ld_melted <- melt(upper_tri,na.rm = TRUE)
+ggplot(data = upper_ld_melted, aes(y=RS_number, x=variable, fill=value)) + 
+  geom_tile(color='white')+
+  scale_fill_gradient2(low='white', high = 'red',space='Lab', 
+                       name='LD score (R2)', na.value='transparent')+
+  scale_x_discrete(limits=snps)+
+  scale_y_discrete(limits=snps, name='SNPs')+
+  theme_minimal()+
+  theme(axis.text.x = element_text(angle=90))+
+  coord_fixed()#+
+  # ggsave('cluster_lung/ld_d_prime.eps', width=8, height=8)
+```
+
+
+
+#### Supplementary Figure 9b: eQTL effects on CHRNA3 and CHRNA5 
+```{r sup_fig9b_plot}
+
+effects <- read.delim("analysis/chrna5_effects.txt")
+
+snps <- c("rs11858836","rs9788721","rs8034191","rs8031948","rs2036527",
+          "rs503464","rs667282","rs17486278","rs1051730","rs12914385",
+          "rs55676755","rs8042374","rs55958997")
+
+chrna3.effects <- read.delim("analysis/chrna3_effects.txt")
+
+effects <- rbind(effects, chrna3.effects)
+ggplot(effects, 
+       aes(x=factor(eQTL, levels=snps), 
+           y=factor(Tissue, levels=rev(sort(levels(Tissue)))))
+           )+
+  geom_tile(aes(fill=Effect))+
+    theme(axis.text.x = element_text(angle=90))+
+  scale_x_discrete("eQTLs")+
+   scale_y_discrete("Tissues")+
+  scale_fill_gradient2(low="#6b0e26", mid="#ffffff", high="#1b335f",
+                       limits=c(-0.8,0.8))+
+  facet_grid(. ~ Gene)#+
+  # ggsave("~/Downloads/chrna_effects.pdf", width=8, height=4, dpi=300)
+
+```
+
+
+#### Supplementary Figure 10a and 10b: Correlation between eQTL-eGene Hi-C counts and eQTL p-values
+```{r sup_fig10ab_plot}
+interactions <- read.delim("analysis/all_hic_counts_tested.txt", header=FALSE)
+names(interactions) <- c("SNP","Gene","Interactions","Total")
+
+eqtl.df <- read.delim("analysis/all_eqtl_interactions.txt")
+
+all.df <- merge(eqtl.df, interactions, by.x=c("SNP","Gene"), by.y=c("SNP","Gene"))
+
+corr_eqn <- function(x,y, digits = 2) {
+  corr_coef <- round(cor(x, y), digits = digits)
+  paste("italic(r) == ", corr_coef)
+}
+
+ggplot(all.df, aes(x=Interactions, y=-log10(P)))+
+  geom_point(color='gray20', alpha=.01)+
+  geom_smooth(method="lm")+
+  annotate("text", x = 400, y = 80, size=4,
+           label = corr_eqn(all.df$Interactions,
+                            -log10(all.df$P)), parse = TRUE)+
+  theme_classic()+
+  scale_y_continuous(limits=c(0,100), expand=c(0,0))+
+  scale_x_continuous(limits=c(0,800), expand=c(0,0))#+
+  # ggsave("unique_fragment_interactions.png", width=4, height=4)
+  
+ggplot(all.df, aes(x=Total, y=-log10(P)))+
+  geom_point(color='gray20', alpha=.01)+
+  geom_smooth(method="lm")+
+  annotate("text", x = 800, y = 80, size=4,
+           label = corr_eqn(all.df$Total,
+                            -log10(all.df$P)), parse = TRUE)+
+  theme_classic()+
+  scale_y_continuous(limits=c(0,100), expand=c(0,0))+
+  scale_x_continuous(limits=c(0,2200), expand=c(0,0))#+
+  # ggsave("supporting_fragment_interactions.png", width=4, height=4)
+```
+
+
+#### Supplementary Figure 10c: Distribution of eQTL-eGene Hi-C interactions in cell lines
+```{r}
+ggplot(hic.data, aes(hic.data$Cell))+
+  geom_bar(fill='#1F78B4')+
+  theme_classic()+
+  labs(x='HiC cell lines', y='eQTL-eGene interaction count')+
+  scale_y_continuous(expand = c(0,0),limits=c(0,80000))
+  # ggsave("hic_counts1.png", width = 5, height=4, dpi=300)
+```
+
+
+#### Supplementary Figure 10d: Tissue proportions of eQTL-eGene associations vs genotyped samples in GTEx (v4)
+```{r sup_fig10d_plot, fig.width=6, fig.height=8}
+tissue.data <- read.delim("analysis/gtex_tissue_summary.txt", 
+                          header = T)
+tissue.data<- tissue.data[ order(-tissue.data$Proportion),]
+
+tissue.data$ProGroup <- case_when(
+  tissue.data$RNASeq <= 50 ~ "<=50",
+  tissue.data$RNASeq > 50 & tissue.data$RNASeq <= 100 ~ "51 - 100",
+  tissue.data$RNASeq >100 & tissue.data$RNASeq <= 150 ~ "101 - 150",
+  tissue.data$RNASeq >150 ~ "151 - 200"
+)
+tissue.data <- na.omit(tissue.data)
+
+ggplot(tissue.data, aes(y=tissue.data$Proportion, x=reorder(tissue.data$Tissue, -tissue.data$Proportion)))+
+   geom_point(aes(size=tissue.data$RNASeq_and_Genotyped, color=tissue.data$RNASeq_and_Genotyped))+
+   coord_flip()+
+  # scale_x_discrete(expand = c(0.03,0.03), limits=rev(levels(tissue.data$Tissue)))+
+  scale_x_discrete(position = 'top')+
+  scale_y_continuous(limits = c(0,0.06), expand = c(0,0))+
+  theme_classic()+
+  labs(title="Tissue Distribution of Spatial Interactions",x="Tissues", 
+       y="Proportion of eQTL-eGene interactions", size='Samples',
+       color='Samples')+
+  scale_size_continuous(range=c(0,10),limits=c(0,200),breaks = c(50,100,150,200))+
+  scale_color_continuous(limits=c(0,200),breaks = c(50,100,150,200))+
+  guides(color=guide_legend(), size=guide_legend())+
+  theme(legend.position = "left", legend.title = )+
+  theme(axis.line.x = element_line(colour = 'black', size=0.5, linetype='solid'),
+        axis.line.y = element_line(colour = 'black', size=0.5, linetype='solid'),
+        panel.grid.major = element_line(colour = '#deebf7', size = 0.3))
+```
+
